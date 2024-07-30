@@ -1,48 +1,46 @@
-# 使用 Ubuntu 22.04 作为基础镜像
+# Use Ubuntu 22.04 as the base image
 FROM ubuntu:22.04
 
-ENV PYTHON_VERSION=3.10
-
-# 设置工作目录
+# Set the working directory
 WORKDIR /chain
 
-# 更新软件包并安装必要的软件包
+# Update packages and install necessary packages
 RUN apt-get update && apt-get install -y \
-    python3-dev \
     build-essential \
     curl \
     vim \
+    jq \
     && rm -rf /var/lib/apt/lists/* \
     && apt clean all
 
-RUN pip3 install \
-    loguru \
-    DingtalkChatbot
-
-
-# 将指定的信息写入 /etc/profile
+# Write specified information into /etc/profile
 RUN echo 'unset -f pathmunge' >> /etc/profile && \
     echo 'export TMOUT=360' >> /etc/profile && \
     echo 'ulimit -c unlimited' >> /etc/profile && \
     echo 'export TOPIO_HOME=/chain' >> /etc/profile
 
-# 暴露必要的 TCP 端口
+# Expose necessary TCP ports
 EXPOSE 19081/tcp
 EXPOSE 19082/tcp
 EXPOSE 19085/tcp
 EXPOSE 8080/tcp
 
-# 暴露必要的 UDP 端口
+# Expose necessary UDP ports
 EXPOSE 9000/udp
 EXPOSE 9001/udp
 
+# The following COPY commands were commented out originally
 #COPY ./bwlist.json /chain
 #COPY ./topio /script
+
+# Copy specific files to the /script directory
 COPY ./run.sh /script/
 COPY ./startupcheck.sh /script/
 COPY ./livecheck.sh /script/
 COPY ./topargus-agent /script/
 
+# Set the user to root
 USER root
 
+# Set the default command to run when the container starts
 CMD ["bash", "/script/run.sh"]
