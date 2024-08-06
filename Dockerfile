@@ -29,10 +29,6 @@ EXPOSE 8080/tcp
 EXPOSE 9000/udp
 EXPOSE 9001/udp
 
-# The following COPY commands were commented out originally
-#COPY ./bwlist.json /chain
-#COPY ./topio /script
-
 # Copy specific files to the /script directory
 COPY ./run.sh /script/
 COPY ./startupcheck.sh /script/

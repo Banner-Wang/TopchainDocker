@@ -46,20 +46,29 @@ check_topio_network_status() {
 # Function to check sync status
 check_sync_status() {
     local account=$1
+    local public_ip=$2
+    local hostname=$3
     output=$(/chain/topio chain syncstatus)
+    log "DEBUG: Raw sync status output: $output"
     
     # Parse output to get total values for each sync-mode
     declare -A sync_status
-    while IFS=',' read -r mode total; do
-        if [[ $total =~ total:[[:space:]]([0-9.]+)% ]]; then
-            sync_status[$mode]=${BASH_REMATCH[1]}
+    while IFS= read -r line; do
+        log "DEBUG: Processing line: $line"
+        if [[ $line =~ total:([0-9.]+)% ]]; then
+            mode=$(echo $line | awk '{print $1}' | sed 's/,$//')
+            total=${BASH_REMATCH[1]}
+            sync_status[$mode]=$total
+            log "DEBUG: Parsed sync status for $mode: ${sync_status[$mode]}"
         fi
-    done <<< "$output"
+    done <<< "$(echo "$output" | grep 'total:')"
     
     # Check if all modes have total value of 100
     all_synced=true
-    for value in "${sync_status[@]}"; do
-        if (( $(echo "$value != 100" | bc -l) )); then
+    for mode in "${!sync_status[@]}"; do
+        value=${sync_status[$mode]}
+        log "DEBUG: Sync status value for $mode: $value"
+        if (( $(awk 'BEGIN {print ('"$value"' != 100)}') )); then
             all_synced=false
             break
         fi
@@ -69,8 +78,12 @@ check_sync_status() {
         log "INFO: All nodes have completed synchronization"
     else
         title="Node synchronization status lagging alert"
-        message="**Node address:** $account
-**Sync status:** ${sync_status[@]}"
+        message="**Node address:** $account\n"
+        message+="**Public IP:** $public_ip\n"
+        message+="**Hostname:** $hostname\n"
+        for mode in "${!sync_status[@]}"; do
+            message+="**Sync mode:** $mode, **Sync status:** ${sync_status[$mode]}%\n"
+        done
         log "WARNING: $title"
         log "$message"
         notify_dingding "$DINGDING_ROBOT_TOKEN" "$title" "$message"
@@ -80,6 +93,8 @@ check_sync_status() {
 # Function to check core files
 check_core_files() {
     local account=$1
+    local public_ip=$2
+    local hostname=$3
     core_files=$(ls -l /chain | grep core)
     
     if [ -z "$core_files" ]; then
@@ -91,8 +106,10 @@ check_core_files() {
             newest_date=$(echo "$core_files" | awk '{print $6, $7, $8}')
             log "WARNING: There is 1 core file, core file date: $newest_date"
             title="Node core file alert"
-            message="**Node address:** $account
-**Core file info:** There is 1 core file, core file date: $newest_date"
+            message="**Node address:** $account\n"
+            message+="**Public IP:** $public_ip\n"
+            message+="**Hostname:** $hostname\n"
+            message+="**Core file info:** There is 1 core file, core file date: $newest_date"
         else
             oldest_date=$(echo "$core_files" | head -n 1 | awk '{print $6, $7, $8}')
             newest_date=$(echo "$core_files" | tail -n 1 | awk '{print $6, $7, $8}')
@@ -109,6 +126,8 @@ check_core_files() {
 # Function to check error logs
 check_error_logs() {
     local account=$1
+    local public_ip=$2
+    local hostname=$3
     log_files=$(ls /chain/log/xtop*log 2>/dev/null)
     
     if [ -z "$log_files" ]; then
@@ -123,8 +142,10 @@ check_error_logs() {
     else
         log "WARNING: Error logs as follows: $error_logs"
         title="Node Error log alert"
-        message="**Node address:** $account
-**Error log info:** $error_logs"
+        message="**Node address:** $account\n"
+        message+="**Public IP:** $public_ip\n"
+        message+="**Hostname:** $hostname\n"
+        message+="**Error log info:** $error_logs"
         log "WARNING: $title"
         log "$message"
         notify_dingding "$DINGDING_ROBOT_TOKEN" "$title" "$message"
@@ -144,6 +165,8 @@ get_account_addr() {
 # Main function
 main() {
     account=$(get_account_addr)
+    public_ip=$(curl -s ifconfig.me)
+    hostname=$(hostname)
     
     # Execute task A
     check_topio_status
@@ -157,9 +180,9 @@ main() {
     # Trigger in the first 5 seconds of the first minute of every hour
     trigger_seconds=${TRIGGER_SECONDS:-5}  # Default to 5 seconds if TRIGGER_SECONDS is not set
     if [ "$current_minute" -eq 0 ] && [ "$current_second" -lt "$trigger_seconds" ]; then
-        check_sync_status "$account"
-        check_core_files "$account"
-        check_error_logs "$account"
+        check_sync_status "$account" "$public_ip" "$hostname"
+        check_core_files "$account" "$public_ip" "$hostname"
+        check_error_logs "$account" "$public_ip" "$hostname"
     fi   
 }
 
